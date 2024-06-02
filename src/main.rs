@@ -1,48 +1,38 @@
 const WINDOW_TITLE: &str = "Nanocraft";
 
-use beryllium::{
-    events::Event,
-    init::InitFlags,
-    video::{CreateWinArgs, GlContextFlags, GlProfile},
-    *,
-};
+extern crate glfw;
+
+use glfw::{Action, Context, Key};
 
 // https://github.com/rust-tutorials/learn-opengl/blob/main/examples/000-basic-window.rs
 
 fn main() {
-    let sdl = Sdl::init(InitFlags::EVERYTHING);
+    use glfw::fail_on_errors;
+    let mut glfw = glfw::init(fail_on_errors!()).unwrap();
 
-    sdl.set_gl_context_major_version(3).unwrap(); // GL 3
-    sdl.set_gl_context_minor_version(3).unwrap(); // GL 3.3
-    sdl.set_gl_profile(GlProfile::Core).unwrap();
-    let mut flags = GlContextFlags::default();
-    if cfg!(target_os = "macos") {
-        flags |= GlContextFlags::FORWARD_COMPATIBLE;
-    }
-    if cfg!(debug_asserts) {
-        flags |= GlContextFlags::DEBUG;
-    }
-    sdl.set_gl_context_flags(flags).unwrap();
+    // Create a windowed mode window and its OpenGL context
+    let (mut window, events) = glfw.create_window(300, 300, "Nanocraft", glfw::WindowMode::Windowed)
+        .expect("Failed to create GLFW window.");
 
-    let _win = sdl
-        .create_gl_window(CreateWinArgs {
-            title: WINDOW_TITLE,
-            width: 800,
-            height: 600,
-            ..Default::default()
-        })
-        .expect("couldn't make a window and context");
+    // Make the window's context current
+    window.make_current();
+    window.set_key_polling(true);
 
-    'main_loop: loop {
-        // handle events this frame
-        while let Some((event, _timestamp)) = sdl.poll_events() {
+    // Loop until the user closes the window
+    while !window.should_close() {
+        // Swap front and back buffers
+        window.swap_buffers();
+
+        // Poll for and process events
+        glfw.poll_events();
+        for (_, event) in glfw::flush_messages(&events) {
+            println!("{:?}", event);
             match event {
-                Event::Quit => break 'main_loop,
-                _ => (),
+                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                    window.set_should_close(true)
+                },
+                _ => {},
             }
         }
-        // now the events are clear.
-
-        // here's where we could change the world state and draw.
     }
 }
