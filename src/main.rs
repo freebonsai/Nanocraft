@@ -6,11 +6,14 @@ use beryllium::{
     video::{CreateWinArgs, GlContextFlags, GlProfile},
     *,
 };
+
+// https://github.com/rust-tutorials/learn-opengl/blob/main/examples/000-basic-window.rs
+
 fn main() {
     let sdl = Sdl::init(InitFlags::EVERYTHING);
 
-    sdl.set_gl_context_major_version(3).unwrap();
-    sdl.set_gl_context_major_version(3).unwrap();
+    sdl.set_gl_context_major_version(3).unwrap(); // GL 3
+    sdl.set_gl_context_minor_version(3).unwrap(); // GL 3.3
     sdl.set_gl_profile(GlProfile::Core).unwrap();
     let mut flags = GlContextFlags::default();
     if cfg!(target_os = "macos") {
