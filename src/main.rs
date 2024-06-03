@@ -8,6 +8,14 @@ extern crate gl;
 
 extern crate femtovg;
 
+use glfw::{Action, Context};
+use gl::types::*;
+use nalgebra::{Matrix4, Perspective3, Point3, Translation3, Vector3};
+use std::ffi::CString;
+use std::mem;
+use std::ptr;
+use std::str;
+
 use femtovg::renderer::OpenGl;
 use femtovg::{Color};
 use glfw::WindowEvent::{MouseButton};
@@ -32,6 +40,124 @@ fn main() {
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
     let renderer = &mut Renderer::create(opengl);
+
+    let vertex_shader = compile_shader(VERTEX_SHADER_SOURCE, gl::VERTEX_SHADER);
+    let fragment_shader = compile_shader(FRAGMENT_SHADER_SOURCE, gl::FRAGMENT_SHADER);
+    let shader_program = link_program(vertex_shader, fragment_shader);
+
+    let mut camera_position = Point3::new(0.0, 0.0, 0.0);
+
+    let vertices: [f32; 72] = [
+        // Positions
+        1.0,  1.0, -1.0, // Top face
+        -1.0,  1.0, -1.0,
+        -1.0,  1.0,  1.0,
+        1.0,  1.0,  1.0,
+
+        1.0, -1.0,  1.0, // Bottom face
+        -1.0, -1.0,  1.0,
+        -1.0, -1.0, -1.0,
+        1.0, -1.0, -1.0,
+
+        1.0,  1.0,  1.0, // Front face
+        -1.0,  1.0,  1.0,
+        -1.0, -1.0,  1.0,
+        1.0, -1.0,  1.0,
+
+        1.0, -1.0, -1.0, // Back face
+        -1.0, -1.0, -1.0,
+        -1.0,  1.0, -1.0,
+        1.0,  1.0, -1.0,
+
+        -1.0,  1.0,  1.0, // Left face
+        -1.0,  1.0, -1.0,
+        -1.0, -1.0, -1.0,
+        -1.0, -1.0,  1.0,
+
+        1.0,  1.0, -1.0, // Right face
+        1.0,  1.0,  1.0,
+        1.0, -1.0,  1.0,
+        1.0, -1.0, -1.0,
+    ];
+
+    let colors: [f32; 72] = [
+        // Colors
+        0.0, 1.0, 0.0, // Top face (green)
+        0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0,
+
+        1.0, 0.5, 0.0, // Bottom face (orange)
+        1.0, 0.5, 0.0,
+        1.0, 0.5, 0.0,
+        1.0, 0.5, 0.0,
+
+        1.0, 0.0, 0.0, // Front face (red)
+        1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
+
+        1.0, 1.0, 0.0, // Back face (yellow)
+        1.0, 1.0, 0.0,
+        1.0, 1.0, 0.0,
+        1.0, 1.0, 0.0,
+
+        0.0, 0.0, 1.0, // Left face (blue)
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+
+        1.0, 0.0, 1.0, // Right face (magenta)
+        1.0, 0.0, 1.0,
+        1.0, 0.0, 1.0,
+        1.0, 0.0, 1.0,
+    ];
+
+    // Set up vertex buffer and array objects
+    let (mut vao, mut vbo_vertices, mut vbo_colors) = (0, 0, 0);
+
+    unsafe {
+        gl::GenVertexArrays(1, &mut vao);
+        gl::GenBuffers(1, &mut vbo_vertices);
+        gl::GenBuffers(1, &mut vbo_colors);
+
+        // Bind VAO
+        gl::BindVertexArray(vao);
+
+        // Bind vertex buffer
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_vertices);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            vertices.as_ptr() as *const GLvoid,
+            gl::STATIC_DRAW,
+        );
+
+        // Vertex attribute
+        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 3 * mem::size_of::<GLfloat>() as GLsizei, ptr::null());
+        gl::EnableVertexAttribArray(0);
+
+        // Bind color buffer
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_colors);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (colors.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            colors.as_ptr() as *const GLvoid,
+            gl::STATIC_DRAW,
+        );
+
+        // Color attribute
+        gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 3 * mem::size_of::<GLfloat>() as GLsizei, ptr::null());
+        gl::EnableVertexAttribArray(1);
+
+        // Unbind VAO
+        gl::BindVertexArray(0);
+    }
+
+    // Enable depth testing
+    unsafe { gl::Enable(gl::DEPTH_TEST); }
+    // Set the depth function to less or equal (default)
+    unsafe { gl::DepthFunc(gl::LEQUAL); }
 
     // Loop until the user closes the window
     while !window.should_close() {
@@ -81,6 +207,29 @@ fn main() {
                 glfw::WindowEvent::Key(glfw::Key::Escape, _, Action::Press, _) => {
                     window.set_should_close(true)
                 }
+                glfw::WindowEvent::Key(glfw::Key::A, _, Action::Press, _) => {
+                    camera_position.x -= 0.5
+                }
+                glfw::WindowEvent::Key(glfw::Key::D, _, Action::Press, _) => {
+                    camera_position.x += 0.5
+                }
+                glfw::WindowEvent::Key(glfw::Key::Space, _, Action::Press, _) => {
+                    camera_position.y += 0.5
+                }
+                glfw::WindowEvent::Key(glfw::Key::LeftShift, _, Action::Press, _) => {
+                    camera_position.y -= 0.5
+                }
+                glfw::WindowEvent::Key(glfw::Key::S, _, Action::Press, _) => {
+                    camera_position.z += 0.5
+                }
+                glfw::WindowEvent::Key(glfw::Key::W, _, Action::Press, _) => {
+                    camera_position.z -= 0.5
+                }
+
+                MouseButton(glfw::MouseButtonLeft, Action::Press, _) => {
+                    // let (x, y) = window.
+                    println!("Clicked at")
+                }
                 _ => {}
             }
         }
@@ -94,6 +243,35 @@ fn draw(renderer: &mut Renderer, w: u32, h: u32) {
 
     renderer.end_frame();
 }
+
+const VERTEX_SHADER_SOURCE: &str = r#"
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec3 aColor;
+
+    out vec3 ourColor;
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    void main() {
+        gl_Position = projection * view * model * vec4(aPos, 1.0);
+        ourColor = aColor;
+    }
+"#;
+
+const FRAGMENT_SHADER_SOURCE: &str = r#"
+    #version 330 core
+    out vec4 FragColor;
+    in vec3 ourColor;
+
+    void main() {
+        FragColor = vec4(ourColor, 1.0);
+    }
+"#;
+
+
 
 fn compile_shader(src: &str, ty: GLenum) -> GLuint {
     let shader;
