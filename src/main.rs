@@ -28,6 +28,10 @@ fn main() {
     use glfw::fail_on_errors;
     let mut glfw = glfw::init(fail_on_errors!()).unwrap();
 
+    glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
+    glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
+    glfw.window_hint(glfw::WindowHint::OpenGlForwardCompat(true));
+
     // Create a windowed mode window and its OpenGL context
     let (mut window, events) = glfw.create_window(1200, 800, WINDOW_TITLE, glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
