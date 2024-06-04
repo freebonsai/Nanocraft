@@ -4,6 +4,8 @@ extern crate glfw;
 
 use std::ffi::CString;
 use std::mem;
+use std::mem::transmute;
+use std::os::raw::c_void;
 use std::ptr;
 use std::str;
 use std::time::Instant;
@@ -11,14 +13,16 @@ use std::time::Instant;
 use femtovg::Color;
 use femtovg::renderer::OpenGl;
 use gl::types::*;
-use glfw::{Action, Context};
+use glfw::{Action, Context, Window};
 use glfw::WindowEvent::MouseButton;
 use nalgebra::{Matrix4, Perspective3, Point3, Translation3, Vector3};
+use crate::GLHandler::{check_errors, framebuffer_size_callback};
 
 // use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f};
 use crate::renderer::Renderer;
 
 mod renderer;
+mod GLHandler;
 
 const WINDOW_TITLE: &str = "Nanocraft";
 
@@ -185,10 +189,12 @@ fn main() {
         gl::BindVertexArray(0);
     }
 
-    // Enable depth testing
-    unsafe { gl::Enable(gl::DEPTH_TEST); }
-    // Set the depth function to less or equal (default)
-    unsafe { gl::DepthFunc(gl::LEQUAL); }
+    unsafe {
+        window.set_framebuffer_size_callback(framebuffer_size_callback);
+        // Enable depth testing
+        gl::Enable(gl::DEPTH_TEST);
+        gl::DepthFunc(gl::LEQUAL);
+    }
 
     let mut last = Instant::now();
     let mut frames = 0;
@@ -209,7 +215,6 @@ fn main() {
 
         // Clear the screen
         unsafe {
-            gl::GetError();
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
@@ -237,8 +242,24 @@ fn main() {
             // Draw cube
             gl::BindVertexArray(vao);
             gl::DrawArrays(gl::TRIANGLES, 0, 36);
-            let error = gl::GetError();
-            println!("{}", error)
+
+            // Create a new translation object
+            let translation_right = Translation3::new(5.0, 0.0, 0.0);
+
+            // Multiply the translation object with the identity matrix
+            let model_right = Matrix4::<f32>::identity() * translation_right.to_homogeneous();
+
+            // Get the uniform location for the model matrix
+            let model_right_location = gl::GetUniformLocation(shader_program, CString::new("model").unwrap().as_ptr());
+
+            // Set the model matrix uniform
+            gl::UniformMatrix4fv(model_right_location, 1, gl::FALSE, model_right.as_ptr());
+
+            // Draw the cube
+            gl::DrawArrays(gl::TRIANGLES, 0, 36);
+
+
+            check_errors("Post Draw!");
         }
 
 
@@ -253,28 +274,28 @@ fn main() {
                 glfw::WindowEvent::Key(glfw::Key::Escape, _, Action::Press, _) => {
                     window.set_should_close(true)
                 }
-                glfw::WindowEvent::Key(glfw::Key::A, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(glfw::Key::A, _, Action::Press | Action::Repeat, _) => {
                     camera_position.x -= 0.5
                 }
-                glfw::WindowEvent::Key(glfw::Key::D, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(glfw::Key::D, _, Action::Press | Action::Repeat, _) => {
                     camera_position.x += 0.5
                 }
-                glfw::WindowEvent::Key(glfw::Key::Space, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(glfw::Key::Space, _, Action::Press | Action::Repeat, _) => {
                     camera_position.y += 0.5
                 }
-                glfw::WindowEvent::Key(glfw::Key::LeftShift, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(glfw::Key::LeftShift, _, Action::Press | Action::Repeat, _) => {
                     camera_position.y -= 0.5
                 }
-                glfw::WindowEvent::Key(glfw::Key::S, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(glfw::Key::S, _, Action::Press | Action::Repeat, _) => {
                     camera_position.z += 0.5
                 }
-                glfw::WindowEvent::Key(glfw::Key::W, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(glfw::Key::W, _, Action::Press | Action::Repeat, _) => {
                     camera_position.z -= 0.5
                 }
 
                 MouseButton(glfw::MouseButtonLeft, Action::Press, _) => {
-                    // let (x, y) = window.
-                    println!("Clicked at")
+                    let (x, y) = window.get_cursor_pos();
+                    println!("Clicked at x: {}, y: {}", x, y)
                 }
                 _ => {}
             }
