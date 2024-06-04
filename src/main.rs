@@ -28,9 +28,12 @@ fn main() {
     use glfw::fail_on_errors;
     let mut glfw = glfw::init(fail_on_errors!()).unwrap();
 
+
     glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
     glfw.window_hint(glfw::WindowHint::OpenGlForwardCompat(true));
+
+
 
     // Create a windowed mode window and its OpenGL context
     let (mut window, events) = glfw.create_window(1200, 800, WINDOW_TITLE, glfw::WindowMode::Windowed)
@@ -51,42 +54,56 @@ fn main() {
 
     let mut camera_position = Point3::new(0.0, 0.0, 0.0);
 
-    let vertices: [f32; 72] = [
+    let vertices: [f32; 108] = [
         // Positions
         1.0,  1.0, -1.0, // Top face
         -1.0,  1.0, -1.0,
         -1.0,  1.0,  1.0,
         1.0,  1.0,  1.0,
+        1.0,  1.0, -1.0,
+        -1.0,  1.0,  1.0,
 
         1.0, -1.0,  1.0, // Bottom face
         -1.0, -1.0,  1.0,
         -1.0, -1.0, -1.0,
         1.0, -1.0, -1.0,
+        1.0, -1.0,  1.0,
+        -1.0, -1.0, -1.0,
 
         1.0,  1.0,  1.0, // Front face
         -1.0,  1.0,  1.0,
         -1.0, -1.0,  1.0,
         1.0, -1.0,  1.0,
+        1.0,  1.0,  1.0,
+        -1.0, -1.0,  1.0,
 
         1.0, -1.0, -1.0, // Back face
         -1.0, -1.0, -1.0,
         -1.0,  1.0, -1.0,
         1.0,  1.0, -1.0,
+        1.0, -1.0, -1.0,
+        -1.0,  1.0, -1.0,
 
         -1.0,  1.0,  1.0, // Left face
         -1.0,  1.0, -1.0,
         -1.0, -1.0, -1.0,
         -1.0, -1.0,  1.0,
+        -1.0,  1.0,  1.0,
+        -1.0, -1.0, -1.0,
 
         1.0,  1.0, -1.0, // Right face
         1.0,  1.0,  1.0,
         1.0, -1.0,  1.0,
         1.0, -1.0, -1.0,
+        1.0,  1.0, -1.0,
+        1.0, -1.0,  1.0,
     ];
 
-    let colors: [f32; 72] = [
+    let colors: [f32; 108] = [
         // Colors
         0.0, 1.0, 0.0, // Top face (green)
+        0.0, 1.0, 0.0,
+        0.0, 1.0, 0.0,
         0.0, 1.0, 0.0,
         0.0, 1.0, 0.0,
         0.0, 1.0, 0.0,
@@ -95,8 +112,12 @@ fn main() {
         1.0, 0.5, 0.0,
         1.0, 0.5, 0.0,
         1.0, 0.5, 0.0,
+        1.0, 0.5, 0.0,
+        1.0, 0.5, 0.0,
 
         1.0, 0.0, 0.0, // Front face (red)
+        1.0, 0.0, 0.0,
+        1.0, 0.0, 0.0,
         1.0, 0.0, 0.0,
         1.0, 0.0, 0.0,
         1.0, 0.0, 0.0,
@@ -105,13 +126,19 @@ fn main() {
         1.0, 1.0, 0.0,
         1.0, 1.0, 0.0,
         1.0, 1.0, 0.0,
+        1.0, 1.0, 0.0,
+        1.0, 1.0, 0.0,
 
         0.0, 0.0, 1.0, // Left face (blue)
         0.0, 0.0, 1.0,
         0.0, 0.0, 1.0,
         0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
+        0.0, 0.0, 1.0,
 
         1.0, 0.0, 1.0, // Right face (magenta)
+        1.0, 0.0, 1.0,
+        1.0, 0.0, 1.0,
         1.0, 0.0, 1.0,
         1.0, 0.0, 1.0,
         1.0, 0.0, 1.0,
@@ -182,6 +209,7 @@ fn main() {
 
         // Clear the screen
         unsafe {
+            gl::GetError();
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
@@ -208,7 +236,9 @@ fn main() {
 
             // Draw cube
             gl::BindVertexArray(vao);
-            gl::DrawArrays(gl::QUADS, 0, 24);
+            gl::DrawArrays(gl::TRIANGLES, 0, 36);
+            let error = gl::GetError();
+            println!("{}", error)
         }
 
 
