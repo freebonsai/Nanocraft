@@ -1,26 +1,26 @@
-mod renderer;
-
-const WINDOW_TITLE: &str = "Nanocraft";
-
+extern crate femtovg;
+extern crate gl;
 extern crate glfw;
 
-extern crate gl;
-
-extern crate femtovg;
-
-use glfw::{Action, Context};
-use gl::types::*;
-use nalgebra::{Matrix4, Perspective3, Point3, Translation3, Vector3};
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
 use std::str;
+use std::time::Instant;
 
+use femtovg::Color;
 use femtovg::renderer::OpenGl;
-use femtovg::{Color};
-use glfw::WindowEvent::{MouseButton};
+use gl::types::*;
+use glfw::{Action, Context};
+use glfw::WindowEvent::MouseButton;
+use nalgebra::{Matrix4, Perspective3, Point3, Translation3, Vector3};
+
 // use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f};
 use crate::renderer::Renderer;
+
+mod renderer;
+
+const WINDOW_TITLE: &str = "Nanocraft";
 
 // https://github.com/rust-tutorials/learn-opengl/blob/main/examples/000-basic-window.rs
 
@@ -163,9 +163,21 @@ fn main() {
     // Set the depth function to less or equal (default)
     unsafe { gl::DepthFunc(gl::LEQUAL); }
 
+    let mut last = Instant::now();
+    let mut frames = 0;
+
     // Loop until the user closes the window
     while !window.should_close() {
-        let (w, h) = window.get_size();
+        frames += 1;
+        let now = Instant::now();
+        // update every second
+        if (now - last).as_secs_f32() >= 1.0 {
+            window.set_title(&format!("Nanocraft; fps - {}", frames));
+            frames = 0;
+            last = now
+        }
+
+        // let (w, h) = window.get_size();
         //draw(renderer, w as u32, h as u32);
 
         // Clear the screen
