@@ -12,7 +12,7 @@ use femtovg::Color;
 use gl::types::*;
 use glfw::{Action, Context, Key};
 use glfw::WindowEvent::MouseButton;
-use nalgebra::{Matrix4, Perspective3, Point3, Translation3, Vector3};
+use nalgebra::{Matrix4, Perspective3, Translation3, Vector3};
 
 use crate::gl_handler::{check_errors, framebuffer_size_callback};
 // use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f};
@@ -20,6 +20,8 @@ use crate::renderer::Renderer;
 
 mod renderer;
 mod gl_handler;
+mod camera;
+mod cube;
 
 const WINDOW_TITLE: &str = "Nanocraft";
 
@@ -42,8 +44,10 @@ fn main() {
 
     window.make_current();
     window.set_mouse_button_polling(true);
+    window.set_cursor_pos_polling(true);
     window.set_key_polling(true);
-    // glfw.set_swap_interval(glfw::SwapInterval::None);
+    window.set_cursor_mode(glfw::CursorMode::Disabled);
+    glfw.set_swap_interval(glfw::SwapInterval::None);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     // let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
@@ -53,97 +57,7 @@ fn main() {
     let fragment_shader = compile_shader(FRAGMENT_SHADER_SOURCE, gl::FRAGMENT_SHADER);
     let shader_program = link_program(vertex_shader, fragment_shader);
 
-    let mut camera_position = Point3::new(0.0, 0.0, 0.0);
-
-    let vertices: [f32; 108] = [
-        // Positions
-        1.0,  1.0, -1.0, // Top face
-        -1.0,  1.0, -1.0,
-        -1.0,  1.0,  1.0,
-        1.0,  1.0,  1.0,
-        1.0,  1.0, -1.0,
-        -1.0,  1.0,  1.0,
-
-        1.0, -1.0,  1.0, // Bottom face
-        -1.0, -1.0,  1.0,
-        -1.0, -1.0, -1.0,
-        1.0, -1.0, -1.0,
-        1.0, -1.0,  1.0,
-        -1.0, -1.0, -1.0,
-
-        1.0,  1.0,  1.0, // Front face
-        -1.0,  1.0,  1.0,
-        -1.0, -1.0,  1.0,
-        1.0, -1.0,  1.0,
-        1.0,  1.0,  1.0,
-        -1.0, -1.0,  1.0,
-
-        1.0, -1.0, -1.0, // Back face
-        -1.0, -1.0, -1.0,
-        -1.0,  1.0, -1.0,
-        1.0,  1.0, -1.0,
-        1.0, -1.0, -1.0,
-        -1.0,  1.0, -1.0,
-
-        -1.0,  1.0,  1.0, // Left face
-        -1.0,  1.0, -1.0,
-        -1.0, -1.0, -1.0,
-        -1.0, -1.0,  1.0,
-        -1.0,  1.0,  1.0,
-        -1.0, -1.0, -1.0,
-
-        1.0,  1.0, -1.0, // Right face
-        1.0,  1.0,  1.0,
-        1.0, -1.0,  1.0,
-        1.0, -1.0, -1.0,
-        1.0,  1.0, -1.0,
-        1.0, -1.0,  1.0,
-    ];
-
-    let colors: [f32; 108] = [
-        // Colors
-        0.0, 1.0, 0.0, // Top face (green)
-        0.0, 1.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 1.0, 0.0,
-
-        1.0, 0.5, 0.0, // Bottom face (orange)
-        1.0, 0.5, 0.0,
-        1.0, 0.5, 0.0,
-        1.0, 0.5, 0.0,
-        1.0, 0.5, 0.0,
-        1.0, 0.5, 0.0,
-
-        1.0, 0.0, 0.0, // Front face (red)
-        1.0, 0.0, 0.0,
-        1.0, 0.0, 0.0,
-        1.0, 0.0, 0.0,
-        1.0, 0.0, 0.0,
-        1.0, 0.0, 0.0,
-
-        1.0, 1.0, 0.0, // Back face (yellow)
-        1.0, 1.0, 0.0,
-        1.0, 1.0, 0.0,
-        1.0, 1.0, 0.0,
-        1.0, 1.0, 0.0,
-        1.0, 1.0, 0.0,
-
-        0.0, 0.0, 1.0, // Left face (blue)
-        0.0, 0.0, 1.0,
-        0.0, 0.0, 1.0,
-        0.0, 0.0, 1.0,
-        0.0, 0.0, 1.0,
-        0.0, 0.0, 1.0,
-
-        1.0, 0.0, 1.0, // Right face (magenta)
-        1.0, 0.0, 1.0,
-        1.0, 0.0, 1.0,
-        1.0, 0.0, 1.0,
-        1.0, 0.0, 1.0,
-        1.0, 0.0, 1.0,
-    ];
+    let mut camera = camera::Camera::new(Vector3::new(0.0, 0.0, 0.0), 0.0, 0.0, 1.0);
 
     // Set up vertex buffer and array objects
     let (mut vao, mut vbo_vertices, mut vbo_colors) = (0, 0, 0);
@@ -160,8 +74,8 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo_vertices);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            vertices.as_ptr() as *const GLvoid,
+            (cube::VERTICES.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            cube::VERTICES.as_ptr() as *const GLvoid,
             gl::STATIC_DRAW,
         );
 
@@ -173,8 +87,8 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo_colors);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (colors.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            colors.as_ptr() as *const GLvoid,
+            (cube::COLORS.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+            cube::COLORS.as_ptr() as *const GLvoid,
             gl::STATIC_DRAW,
         );
 
@@ -198,6 +112,10 @@ fn main() {
     let mut z: i8 = 0;
     let mut fly_speed: f32 = 1.0;
 
+    let mut last_x = 400.0;
+    let mut last_y = 300.0;
+    let mut first_mouse = true;
+
     let mut last_update = Instant::now();
     let mut last_frame = Instant::now();
     let mut frames = 0;
@@ -215,64 +133,86 @@ fn main() {
             last_update = now
         }
 
-        let delta = duration_since;// as f32;car
+        let delta = duration_since;
 
-        camera_position.x += (x as f32 * fly_speed) * delta;
-        camera_position.z += (z as f32 * fly_speed) * delta;
-        camera_position.y += (y as f32 * fly_speed) * delta;
+        camera.process_keyboard(camera::Direction::X, x as f32 * fly_speed, delta); // works
+        camera.process_keyboard(camera::Direction::Z, z as f32 * fly_speed, delta);
+        camera.position.y += (y as f32 * fly_speed) * delta;
 
 
-        // let (w, h) = window.get_size();
-        //draw(renderer, w as u32, h as u32);
+        struct Cube {
+            position: Vector3<f32>,
+            color: Vector3<f32>,
+        }
 
-        // Clear the screen
+        let cubes = vec![
+            Cube {
+                position: Vector3::new(1.5, 0.0, -7.0),
+                color: Vector3::new(1.0, 0.0, 0.0),
+            },
+            Cube {
+                position: Vector3::new(8.0, 0.0, -7.0),
+                color: Vector3::new(0.0, 1.0, 0.0),
+            },
+            Cube {
+                position: Vector3::new(8.0, 10.0, -7.0),
+                color: Vector3::new(0.0, 1.0, 1.0),
+            },
+            Cube {
+                position: Vector3::new(-5.0, 0.0, 7.0),
+                color: Vector3::new(0.5, 0.5, 0.0),
+            },
+            // Add more cubes as needed
+        ];
+
+
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
+
+
+        // Calculate the view matrix using look_at_rh
+        let view = camera.view_matrix();
 
         // Use shader program
         unsafe {
             gl::UseProgram(shader_program);
 
-            // Set up camera transformation
-            // Set up camera transformation
-            let view = Matrix4::look_at_rh(&camera_position, &(camera_position + Vector3::new(0.0, 0.0, -1.0)), &Vector3::new(0.0, 1.0, 0.0));
+            // Set the view matrix uniform
             let view_location = gl::GetUniformLocation(shader_program, CString::new("view").unwrap().as_ptr());
             gl::UniformMatrix4fv(view_location, 1, gl::FALSE, view.as_ptr());
 
-            // Model matrix remains the same
+            // Set the model matrix (unchanged)
             let translation = Translation3::new(1.5, 0.0, -7.0);
             let model: Matrix4<f32> = Matrix4::<f32>::identity() * translation.to_homogeneous();
             let model_location = gl::GetUniformLocation(shader_program, CString::new("model").unwrap().as_ptr());
             gl::UniformMatrix4fv(model_location, 1, gl::FALSE, model.as_ptr());
 
-            // Projection matrix remains the same
+            // Set the projection matrix (unchanged)
             let projection = Perspective3::new(800.0 / 600.0, 45.0f32.to_radians(), 0.1, 100.0).to_homogeneous();
             let projection_location = gl::GetUniformLocation(shader_program, CString::new("projection").unwrap().as_ptr());
             gl::UniformMatrix4fv(projection_location, 1, gl::FALSE, projection.as_ptr());
 
-            // Draw cube
-            gl::BindVertexArray(vao);
-            gl::DrawArrays(gl::TRIANGLES, 0, 36);
+            for cube in &cubes {
+                // Set the model matrix uniform
+                let translation = Translation3::new(cube.position.x, cube.position.y, cube.position.z);
+                let model: Matrix4<f32> = Matrix4::<f32>::identity() * translation.to_homogeneous();
+                let model_location = gl::GetUniformLocation(shader_program, CString::new("model").unwrap().as_ptr());
+                gl::UniformMatrix4fv(model_location, 1, gl::FALSE, model.as_ptr());
 
-            // Create a new translation object
-            let translation_right = Translation3::new(5.0, 0.0, 0.0);
+                // Set the color uniform
+                let uniform_color_location = gl::GetUniformLocation(shader_program, CString::new("uniformColor").unwrap().as_ptr());
+                gl::Uniform3f(uniform_color_location, cube.color.x, cube.color.y, cube.color.z);
 
-            // Multiply the translation object with the identity matrix
-            let model_right = Matrix4::<f32>::identity() * translation_right.to_homogeneous();
+                // Bind VAO and draw
+                gl::BindVertexArray(vao);
+                gl::DrawArrays(gl::TRIANGLES, 0, 36);
+            }
 
-            // Get the uniform location for the model matrix
-            let model_right_location = gl::GetUniformLocation(shader_program, CString::new("model").unwrap().as_ptr());
-
-            // Set the model matrix uniform
-            gl::UniformMatrix4fv(model_right_location, 1, gl::FALSE, model_right.as_ptr());
-
-            // Draw the cube
-            gl::DrawArrays(gl::TRIANGLES, 0, 36);
-
-
+            // Check for errors
             check_errors("Post Draw!");
         }
+
 
         // Swap front and back buffers
         window.swap_buffers();
@@ -285,19 +225,42 @@ fn main() {
                     window.set_should_close(true)
                 }
                 glfw::WindowEvent::Key(key, _, action, _) => {
-                    match (key, action) {
-                        (Key::A, Action::Press) | (Key::D, Action::Release) => x -= 1,
-                        (Key::A, Action::Release) | (Key::D, Action::Press) => x += 1,
+                    match (key, action) { // every frame it moves based on these values
+                        (Key::A, Action::Press) | (Key::D, Action::Release) => x += 1,
+                        (Key::A, Action::Release) | (Key::D, Action::Press) => x -= 1,
                         (Key::W, Action::Press) | (Key::S, Action::Release) => z -= 1,
                         (Key::W, Action::Release) | (Key::S, Action::Press) =>  z += 1,
                         (Key::Space, Action::Press) | (Key::LeftShift, Action::Release) => y += 1,
                         (Key::Space, Action::Release) | (Key::LeftShift, Action::Press) => y -= 1,
-                        (Key::Q, (Action::Press | Action::Repeat)) => fly_speed += 0.1,
-                        (Key::E, (Action::Press | Action::Repeat)) => fly_speed -= 0.1,
-
                         _ => {}
                     }
                 }
+
+                glfw::WindowEvent::CursorPos(xpos, ypos) => {
+                    if first_mouse {
+                        last_x = xpos;
+                        last_y = ypos;
+                        first_mouse = false;
+                    }
+
+                    let xoffset = xpos - last_x;
+                    let yoffset = last_y - ypos; // Reversed since y-coordinates range from bottom to top
+                    last_x = xpos;
+                    last_y = ypos;
+
+                    let sensitivity = 0.1; // Change this value to your liking
+                    camera.yaw += xoffset as f32 * sensitivity;
+                    camera.pitch += yoffset as f32 * sensitivity;
+
+                    // Constrain the pitch to avoid flipping the camera
+                    if camera.pitch > 89.0_f32 {
+                        camera.pitch = 89.0_f32;
+                    }
+                    if camera.pitch < -89.0_f32 {
+                        camera.pitch = -89.0_f32;
+                    }
+                }
+
                 MouseButton(glfw::MouseButtonLeft, Action::Press, _) => {
                     let (x, y) = window.get_cursor_pos();
                     println!("Clicked at x: {}, y: {}", x, y)
@@ -321,15 +284,12 @@ const VERTEX_SHADER_SOURCE: &str = r#"
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec3 aColor;
 
-    out vec3 ourColor;
-
     uniform mat4 model;
     uniform mat4 view;
     uniform mat4 projection;
 
     void main() {
         gl_Position = projection * view * model * vec4(aPos, 1.0);
-        ourColor = aColor;
     }
 "#;
 
@@ -337,13 +297,14 @@ const FRAGMENT_SHADER_SOURCE: &str = r#"
     #version 330 core
     out vec4 FragColor;
     in vec3 ourColor;
+    uniform vec3 uniformColor;
 
     void main() {
-        FragColor = vec4(ourColor, 1.0);
+        FragColor = vec4(uniformColor, 1.0);
     }
 "#;
 
-
+// i think we make placing + breaking or atleast having a easy way to make multiple cubes with like different colors
 
 fn compile_shader(src: &str, ty: GLenum) -> GLuint {
     let shader;
