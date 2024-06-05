@@ -4,25 +4,22 @@ extern crate glfw;
 
 use std::ffi::CString;
 use std::mem;
-use std::mem::transmute;
-use std::os::raw::c_void;
 use std::ptr;
 use std::str;
 use std::time::Instant;
 
 use femtovg::Color;
-use femtovg::renderer::OpenGl;
 use gl::types::*;
-use glfw::{Action, Context, Window};
+use glfw::{Action, Context, Key};
 use glfw::WindowEvent::MouseButton;
 use nalgebra::{Matrix4, Perspective3, Point3, Translation3, Vector3};
-use crate::GLHandler::{check_errors, framebuffer_size_callback};
 
+use crate::gl_handler::{check_errors, framebuffer_size_callback};
 // use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f};
 use crate::renderer::Renderer;
 
 mod renderer;
-mod GLHandler;
+mod gl_handler;
 
 const WINDOW_TITLE: &str = "Nanocraft";
 
@@ -46,11 +43,11 @@ fn main() {
     window.make_current();
     window.set_mouse_button_polling(true);
     window.set_key_polling(true);
-    glfw.set_swap_interval(glfw::SwapInterval::None);
+    // glfw.set_swap_interval(glfw::SwapInterval::None);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
-    let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
-    let renderer = &mut Renderer::create(opengl);
+    // let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
+    // let renderer = &mut Renderer::create(opengl);
 
     let vertex_shader = compile_shader(VERTEX_SHADER_SOURCE, gl::VERTEX_SHADER);
     let fragment_shader = compile_shader(FRAGMENT_SHADER_SOURCE, gl::FRAGMENT_SHADER);
@@ -196,19 +193,34 @@ fn main() {
         gl::DepthFunc(gl::LEQUAL);
     }
 
-    let mut last = Instant::now();
+    let mut x: i8 = 0;
+    let mut y: i8 = 0;
+    let mut z: i8 = 0;
+    let mut fly_speed: f32 = 1.0;
+
+    let mut last_update = Instant::now();
+    let mut last_frame = Instant::now();
     let mut frames = 0;
 
     // Loop until the user closes the window
     while !window.should_close() {
         frames += 1;
         let now = Instant::now();
-        // update every second
-        if (now - last).as_secs_f32() >= 1.0 {
+        let duration_since = now.duration_since(last_frame).as_secs_f32();
+        last_frame = Instant::now();
+            // update every second
+        if now.duration_since(last_update).as_secs_f32() >= 1.0 {
             window.set_title(&format!("Nanocraft; fps - {}", frames));
             frames = 0;
-            last = now
+            last_update = now
         }
+
+        let delta = duration_since;// as f32;car
+
+        camera_position.x += (x as f32 * fly_speed) * delta;
+        camera_position.z += (z as f32 * fly_speed) * delta;
+        camera_position.y += (y as f32 * fly_speed) * delta;
+
 
         // let (w, h) = window.get_size();
         //draw(renderer, w as u32, h as u32);
@@ -262,37 +274,30 @@ fn main() {
             check_errors("Post Draw!");
         }
 
-
         // Swap front and back buffers
         window.swap_buffers();
 
         // Poll for and process events
         glfw.poll_events();
         for (_, event) in glfw::flush_messages(&events) {
-            println!("{:?}", event);
             match event {
-                glfw::WindowEvent::Key(glfw::Key::Escape, _, Action::Press, _) => {
+                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     window.set_should_close(true)
                 }
-                glfw::WindowEvent::Key(glfw::Key::A, _, Action::Press | Action::Repeat, _) => {
-                    camera_position.x -= 0.5
-                }
-                glfw::WindowEvent::Key(glfw::Key::D, _, Action::Press | Action::Repeat, _) => {
-                    camera_position.x += 0.5
-                }
-                glfw::WindowEvent::Key(glfw::Key::Space, _, Action::Press | Action::Repeat, _) => {
-                    camera_position.y += 0.5
-                }
-                glfw::WindowEvent::Key(glfw::Key::LeftShift, _, Action::Press | Action::Repeat, _) => {
-                    camera_position.y -= 0.5
-                }
-                glfw::WindowEvent::Key(glfw::Key::S, _, Action::Press | Action::Repeat, _) => {
-                    camera_position.z += 0.5
-                }
-                glfw::WindowEvent::Key(glfw::Key::W, _, Action::Press | Action::Repeat, _) => {
-                    camera_position.z -= 0.5
-                }
+                glfw::WindowEvent::Key(key, _, action, _) => {
+                    match (key, action) {
+                        (Key::A, Action::Press) | (Key::D, Action::Release) => x -= 1,
+                        (Key::A, Action::Release) | (Key::D, Action::Press) => x += 1,
+                        (Key::W, Action::Press) | (Key::S, Action::Release) => z -= 1,
+                        (Key::W, Action::Release) | (Key::S, Action::Press) =>  z += 1,
+                        (Key::Space, Action::Press) | (Key::LeftShift, Action::Release) => y += 1,
+                        (Key::Space, Action::Release) | (Key::LeftShift, Action::Press) => y -= 1,
+                        (Key::Q, (Action::Press | Action::Repeat)) => fly_speed += 0.1,
+                        (Key::E, (Action::Press | Action::Repeat)) => fly_speed -= 0.1,
 
+                        _ => {}
+                    }
+                }
                 MouseButton(glfw::MouseButtonLeft, Action::Press, _) => {
                     let (x, y) = window.get_cursor_pos();
                     println!("Clicked at x: {}, y: {}", x, y)
