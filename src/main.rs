@@ -1,7 +1,10 @@
 extern crate femtovg;
 extern crate gl;
 extern crate glfw;
+extern crate image;
 
+use image::GenericImageView;
+use std::path::Path;
 use std::ffi::CString;
 use std::mem;
 use std::ptr;
@@ -13,6 +16,7 @@ use gl::types::*;
 use glfw::{Action, Context, Key};
 use glfw::WindowEvent::MouseButton;
 use nalgebra::{Matrix4, Perspective3, Translation3, Vector3};
+use crate::cube::VERTICES;
 
 use crate::gl_handler::{check_errors, framebuffer_size_callback};
 // use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f};
@@ -47,6 +51,7 @@ fn main() {
     window.set_cursor_pos_polling(true);
     window.set_key_polling(true);
     window.set_cursor_mode(glfw::CursorMode::Disabled);
+    set_window_icon(&mut window, "resources/icon.png");
     glfw.set_swap_interval(glfw::SwapInterval::None);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
@@ -65,7 +70,6 @@ fn main() {
     unsafe {
         gl::GenVertexArrays(1, &mut vao);
         gl::GenBuffers(1, &mut vbo_vertices);
-        gl::GenBuffers(1, &mut vbo_colors);
 
         // Bind VAO
         gl::BindVertexArray(vao);
@@ -74,26 +78,31 @@ fn main() {
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo_vertices);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            (cube::VERTICES.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            cube::VERTICES.as_ptr() as *const GLvoid,
+            (VERTICES.len() * std::mem::size_of::<f32>()) as isize,
+            VERTICES.as_ptr() as *const _,
             gl::STATIC_DRAW,
         );
 
-        // Vertex attribute
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 3 * mem::size_of::<GLfloat>() as GLsizei, ptr::null());
+        // Vertex attribute for positions
+        gl::VertexAttribPointer(
+            0,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            5 * std::mem::size_of::<f32>() as i32,
+            std::ptr::null(),
+        );
         gl::EnableVertexAttribArray(0);
 
-        // Bind color buffer
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_colors);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (cube::COLORS.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
-            cube::COLORS.as_ptr() as *const GLvoid,
-            gl::STATIC_DRAW,
+        // Vertex attribute for texture coordinates
+        gl::VertexAttribPointer(
+            1,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            5 * std::mem::size_of::<f32>() as i32,
+            (3 * std::mem::size_of::<f32>()) as *const _,
         );
-
-        // Color attribute
-        gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 3 * mem::size_of::<GLfloat>() as GLsizei, ptr::null());
         gl::EnableVertexAttribArray(1);
 
         // Unbind VAO
@@ -120,6 +129,10 @@ fn main() {
     let mut last_frame = Instant::now();
     let mut frames = 0;
 
+    let iron_block = load_texture("resources/iron_block.png");
+    let dirt_block = load_texture("resources/dirt.png");
+    let icon_block = load_texture("resources/icon.png");
+
     // Loop until the user closes the window
     while !window.should_close() {
         frames += 1;
@@ -143,24 +156,29 @@ fn main() {
         struct Cube {
             position: Vector3<f32>,
             color: Vector3<f32>,
+            texture: u32,
         }
 
         let cubes = vec![
             Cube {
                 position: Vector3::new(1.5, 0.0, -7.0),
                 color: Vector3::new(1.0, 0.0, 0.0),
+                texture: iron_block,
             },
             Cube {
                 position: Vector3::new(8.0, 0.0, -7.0),
                 color: Vector3::new(0.0, 1.0, 0.0),
+                texture: dirt_block,
             },
             Cube {
                 position: Vector3::new(8.0, 10.0, -7.0),
                 color: Vector3::new(0.0, 1.0, 1.0),
+                texture: iron_block,
             },
             Cube {
                 position: Vector3::new(-5.0, 0.0, 7.0),
                 color: Vector3::new(0.5, 0.5, 0.0),
+                texture: icon_block,
             },
             // Add more cubes as needed
         ];
@@ -194,15 +212,17 @@ fn main() {
             gl::UniformMatrix4fv(projection_location, 1, gl::FALSE, projection.as_ptr());
 
             for cube in &cubes {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, cube.texture);
+                let texture_location = gl::GetUniformLocation(shader_program, CString::new("texture1").unwrap().as_ptr());
+                gl::Uniform1i(texture_location, 0);
+
                 // Set the model matrix uniform
                 let translation = Translation3::new(cube.position.x, cube.position.y, cube.position.z);
                 let model: Matrix4<f32> = Matrix4::<f32>::identity() * translation.to_homogeneous();
                 let model_location = gl::GetUniformLocation(shader_program, CString::new("model").unwrap().as_ptr());
                 gl::UniformMatrix4fv(model_location, 1, gl::FALSE, model.as_ptr());
 
-                // Set the color uniform
-                let uniform_color_location = gl::GetUniformLocation(shader_program, CString::new("uniformColor").unwrap().as_ptr());
-                gl::Uniform3f(uniform_color_location, cube.color.x, cube.color.y, cube.color.z);
 
                 // Bind VAO and draw
                 gl::BindVertexArray(vao);
@@ -279,33 +299,6 @@ fn draw(renderer: &mut Renderer, w: u32, h: u32) {
     renderer.end_frame();
 }
 
-const VERTEX_SHADER_SOURCE: &str = r#"
-    #version 330 core
-    layout (location = 0) in vec3 aPos;
-    layout (location = 1) in vec3 aColor;
-
-    uniform mat4 model;
-    uniform mat4 view;
-    uniform mat4 projection;
-
-    void main() {
-        gl_Position = projection * view * model * vec4(aPos, 1.0);
-    }
-"#;
-
-const FRAGMENT_SHADER_SOURCE: &str = r#"
-    #version 330 core
-    out vec4 FragColor;
-    in vec3 ourColor;
-    uniform vec3 uniformColor;
-
-    void main() {
-        FragColor = vec4(uniformColor, 1.0);
-    }
-"#;
-
-// i think we make placing + breaking or atleast having a easy way to make multiple cubes with like different colors
-
 fn compile_shader(src: &str, ty: GLenum) -> GLuint {
     let shader;
     unsafe {
@@ -332,6 +325,37 @@ fn compile_shader(src: &str, ty: GLenum) -> GLuint {
     shader
 }
 
+const VERTEX_SHADER_SOURCE: &str = r#"
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec2 aTexCoords;
+
+    out vec2 TexCoords;
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    void main() {
+        TexCoords = aTexCoords;
+        gl_Position = projection * view * model * vec4(aPos, 1.0);
+    }
+"#;
+
+const FRAGMENT_SHADER_SOURCE: &str = r#"
+    #version 330 core
+
+    in vec2 TexCoords;
+
+    uniform sampler2D texture1;
+
+    out vec4 FragColor;
+
+    void main() {
+        FragColor = texture(texture1, TexCoords);
+    }
+"#;
+
 fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
     let program;
     unsafe {
@@ -356,4 +380,57 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
         }
     }
     program
+}
+
+fn load_texture(file_path: &str) -> u32 {
+    let img = image::open(&Path::new(file_path)).expect("Failed to load texture");
+    let img = img.flipv(); // Flip vertically
+
+    let (width, height) = img.dimensions();
+    let data = img.to_rgba8();
+
+    let mut texture_id: u32 = 0;
+    unsafe {
+        gl::GenTextures(1, &mut texture_id);
+        gl::BindTexture(gl::TEXTURE_2D, texture_id);
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::RGBA as i32,
+            width as i32,
+            height as i32,
+            0,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            data.as_ptr() as *const _,
+        );
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+    }
+
+    texture_id
+}
+
+fn set_window_icon(window: &mut glfw::Window, file_path: &str) {
+    // Load the image using the image crate
+    let img = image::open(&Path::new(file_path)).expect("Failed to load icon image");
+    let img = img.to_rgba8();
+    let (width, height) = img.dimensions();
+    let data = img.into_raw();
+
+    // Create a GLFW image
+    let icon = glfw::ffi::GLFWimage {
+        width: width as i32,
+        height: height as i32,
+        pixels: data.as_ptr() as *mut _,
+    };
+
+    // Set the window icon
+    unsafe {
+        glfw::ffi::glfwSetWindowIcon(window.window_ptr(), 1, &icon);
+    }
 }
