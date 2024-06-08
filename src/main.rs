@@ -2,20 +2,24 @@ extern crate femtovg;
 extern crate gl;
 extern crate glfw;
 extern crate image;
+extern crate include_dir;
 
-use std::ffi::CString;
+use image::GenericImageView;
 use std::path::Path;
+use std::ffi::CString;
+use std::mem;
 use std::ptr;
 use std::str;
 use std::time::Instant;
 
 use gl::types::*;
-use glfw::{Action, Context, Key};
+use glfw::{Action, Context, ffi, Key, Monitor, PWindow, WindowMode};
 use glfw::WindowEvent::MouseButton;
-use image::GenericImageView;
 use nalgebra::{Matrix4, Perspective3, Translation3, Vector3};
-
 use crate::cube::VERTICES;
+use include_dir::{include_dir, Dir};
+use std::io::Cursor;
+
 use crate::gl_handler::{check_errors, framebuffer_size_callback};
 
 mod gl_handler;
@@ -23,6 +27,7 @@ mod camera;
 mod cube;
 
 const WINDOW_TITLE: &str = "Nanocraft";
+static RESOURCES_DIR: Dir = include_dir!("resources");
 
 // https://github.com/rust-tutorials/learn-opengl/blob/main/examples/000-basic-window.rs
 
@@ -50,6 +55,8 @@ fn main() {
     glfw.set_swap_interval(glfw::SwapInterval::None);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
+    // let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
+    // let renderer = &mut Renderer::create(opengl);
 
     let vertex_shader = compile_shader(VERTEX_SHADER_SOURCE, gl::VERTEX_SHADER);
     let fragment_shader = compile_shader(FRAGMENT_SHADER_SOURCE, gl::FRAGMENT_SHADER);
@@ -109,6 +116,14 @@ fn main() {
         gl::DepthFunc(gl::LEQUAL);
     }
 
+
+
+    let iron_block = load_texture("iron_block.png");
+    let dirt_block = load_texture("dirt.png");
+    let icon_block = load_texture("icon.png");
+
+
+
     let mut x: i8 = 0;
     let mut y: i8 = 0;
     let mut z: i8 = 0;
@@ -118,13 +133,47 @@ fn main() {
     let mut last_y = 300.0;
     let mut first_mouse = true;
 
+    let mut is_fullscreen = false; // Track the fullscreen state
+    let mut previousX = 0;
+    let mut previousY = 0;
+    let mut previousW = 0;
+    let mut previousH = 0;
+
     let mut last_update = Instant::now();
     let mut last_frame = Instant::now();
     let mut frames = 0;
 
-    let iron_block = load_texture("resources/iron_block.png");
-    let dirt_block = load_texture("resources/dirt.png");
-    let icon_block = load_texture("resources/icon.png");
+    struct Cube {
+        position: Vector3<f32>,
+        color: Vector3<f32>,
+        texture: u32,
+    }
+
+    let cubes = vec![
+        Cube {
+            position: Vector3::new(1.5, 0.0, -7.0),
+            color: Vector3::new(1.0, 0.0, 0.0),
+            texture: iron_block,
+        },
+        Cube {
+            position: Vector3::new(8.0, 0.0, -7.0),
+            color: Vector3::new(0.0, 1.0, 0.0),
+            texture: dirt_block,
+        },
+        Cube {
+            position: Vector3::new(8.0, 10.0, -7.0),
+            color: Vector3::new(0.0, 1.0, 1.0),
+            texture: iron_block,
+        },
+        Cube {
+            position: Vector3::new(-5.0, 0.0, 7.0),
+            color: Vector3::new(0.5, 0.5, 0.0),
+            texture: icon_block,
+        },
+        // Add more cubes as needed
+    ];
+
+
 
     // Loop until the user closes the window
     while !window.should_close() {
@@ -139,42 +188,13 @@ fn main() {
             last_update = now
         }
 
+
         let delta = duration_since;
 
         camera.process_keyboard(camera::Direction::X, x as f32 * fly_speed, delta); // works
         camera.process_keyboard(camera::Direction::Z, z as f32 * fly_speed, delta);
         camera.position.y += (y as f32 * fly_speed) * delta;
 
-
-        struct Cube {
-            position: Vector3<f32>,
-            color: Vector3<f32>,
-            texture: u32,
-        }
-
-        let cubes = vec![
-            Cube {
-                position: Vector3::new(1.5, 0.0, -7.0),
-                color: Vector3::new(1.0, 0.0, 0.0),
-                texture: iron_block,
-            },
-            Cube {
-                position: Vector3::new(8.0, 0.0, -7.0),
-                color: Vector3::new(0.0, 1.0, 0.0),
-                texture: dirt_block,
-            },
-            Cube {
-                position: Vector3::new(8.0, 10.0, -7.0),
-                color: Vector3::new(0.0, 1.0, 1.0),
-                texture: iron_block,
-            },
-            Cube {
-                position: Vector3::new(-5.0, 0.0, 7.0),
-                color: Vector3::new(0.5, 0.5, 0.0),
-                texture: icon_block,
-            },
-            // Add more cubes as needed
-        ];
 
 
         unsafe {
@@ -232,6 +252,7 @@ fn main() {
 
         // Poll for and process events
         glfw.poll_events();
+
         for (_, event) in glfw::flush_messages(&events) {
             match event {
                 glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
@@ -245,6 +266,23 @@ fn main() {
                         (Key::W, Action::Release) | (Key::S, Action::Press) =>  z += 1,
                         (Key::Space, Action::Press) | (Key::LeftShift, Action::Release) => y += 1,
                         (Key::Space, Action::Release) | (Key::LeftShift, Action::Press) => y -= 1,
+                        (Key::G, Action::Press) => unsafe {
+                            if is_fullscreen {
+                                window.set_monitor(WindowMode::Windowed, previousX, previousY, previousW as u32, previousH as u32, Option::from(0u32));
+                            } else {
+                                glfw.with_primary_monitor(|_, mut primary_monitor| {
+                                    if let Some(monitor) = primary_monitor {
+                                        let mode = monitor.get_video_mode().expect("Failed to get video mode");
+                                        (previousX, previousY) = window.get_pos();
+                                        (previousW, previousH) = window.get_size();
+
+                                        window.set_monitor(WindowMode::FullScreen(monitor), 0, 0, mode.width, mode.height, Option::from(mode.refresh_rate));
+                                    }
+                                });
+                            }
+                            is_fullscreen = !is_fullscreen;
+
+                        }
                         _ => {}
                     }
                 }
@@ -262,6 +300,7 @@ fn main() {
                     last_y = ypos;
 
                     let sensitivity = 0.1; // Change this value to your liking
+
                     camera.yaw += xoffset as f32 * sensitivity;
                     camera.pitch += yoffset as f32 * sensitivity;
 
@@ -281,6 +320,10 @@ fn main() {
                 _ => {}
             }
         }
+
+
+
+
     }
 }
 
@@ -368,8 +411,11 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 }
 
 fn load_texture(file_path: &str) -> u32 {
-    let img = image::open(&Path::new(file_path)).expect("Failed to load texture");
-    let img = img.flipv(); // Flip vertically
+    let file =  RESOURCES_DIR.get_file(file_path).expect("Texture file not found in resources!");
+    let img = image::load(Cursor::new(file.contents()), image::ImageFormat::Png)
+        .expect("Failed to load icon image")
+        .flipv()
+        .to_rgba8();
 
     let (width, height) = img.dimensions();
     let data = img.to_rgba8();
@@ -387,7 +433,7 @@ fn load_texture(file_path: &str) -> u32 {
             0,
             gl::RGBA,
             gl::UNSIGNED_BYTE,
-            data.as_ptr() as *const _,
+            img.as_ptr() as *const _,
         );
         gl::GenerateMipmap(gl::TEXTURE_2D);
 
@@ -401,9 +447,11 @@ fn load_texture(file_path: &str) -> u32 {
 }
 
 fn set_window_icon(window: &mut glfw::Window, file_path: &str) {
+    let icon_file = RESOURCES_DIR.get_file(file_path).expect("Icon file not found in resources");
     // Load the image using the image crate
-    let img = image::open(&Path::new(file_path)).expect("Failed to load icon image");
-    let img = img.to_rgba8();
+    let img = image::load(Cursor::new(icon_file.contents()), image::ImageFormat::Png)
+        .expect("Failed to load icon image")
+        .to_rgba8();
     let (width, height) = img.dimensions();
     let data = img.into_raw();
 
