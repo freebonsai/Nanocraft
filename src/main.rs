@@ -4,24 +4,26 @@ extern crate glfw;
 extern crate image;
 extern crate include_dir;
 
-use image::GenericImageView;
-use std::path::Path;
 use std::ffi::CString;
-use std::mem;
+use std::io::Cursor;
 use std::ptr;
 use std::str;
 use std::time::Instant;
 
+use femtovg::Color;
 use gl::types::*;
-use glfw::{Action, Context, ffi, Key, Monitor, PWindow, WindowMode};
+use glfw::{Action, Context, Key, WindowMode};
 use glfw::WindowEvent::MouseButton;
+use image::GenericImageView;
+use include_dir::{Dir, include_dir};
 use nalgebra::{Matrix4, Perspective3, Translation3, Vector3};
+
 use crate::cube::VERTICES;
-use include_dir::{include_dir, Dir};
-use std::io::Cursor;
-
 use crate::gl_handler::{check_errors, framebuffer_size_callback};
+// use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f}; a
+use crate::renderer::Renderer;
 
+mod renderer;
 mod gl_handler;
 mod camera;
 mod cube;
@@ -51,12 +53,13 @@ fn main() {
     window.set_cursor_pos_polling(true);
     window.set_key_polling(true);
     window.set_cursor_mode(glfw::CursorMode::Disabled);
-    set_window_icon(&mut window, "resources/icon.png");
+    set_window_icon(&mut window, "icon.png");
     glfw.set_swap_interval(glfw::SwapInterval::None);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     // let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
     // let renderer = &mut Renderer::create(opengl);
+
 
     let vertex_shader = compile_shader(VERTEX_SHADER_SOURCE, gl::VERTEX_SHADER);
     let fragment_shader = compile_shader(FRAGMENT_SHADER_SOURCE, gl::FRAGMENT_SHADER);
@@ -327,6 +330,14 @@ fn main() {
     }
 }
 
+fn draw(renderer: &mut Renderer, w: u32, h: u32) {
+    renderer.begin_frame(w, h);
+
+    renderer.rect(0.0, 0.0, 100.0, 100.0, Color::rgb(255, 0, 0));
+
+    renderer.end_frame();
+}
+
 fn compile_shader(src: &str, ty: GLenum) -> GLuint {
     let shader;
     unsafe {
@@ -418,7 +429,6 @@ fn load_texture(file_path: &str) -> u32 {
         .to_rgba8();
 
     let (width, height) = img.dimensions();
-    let data = img.to_rgba8();
 
     let mut texture_id: u32 = 0;
     unsafe {
