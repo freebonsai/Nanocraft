@@ -3,26 +3,21 @@ extern crate gl;
 extern crate glfw;
 extern crate image;
 
-use image::GenericImageView;
-use std::path::Path;
 use std::ffi::CString;
-use std::mem;
+use std::path::Path;
 use std::ptr;
 use std::str;
 use std::time::Instant;
 
-use femtovg::Color;
 use gl::types::*;
 use glfw::{Action, Context, Key};
 use glfw::WindowEvent::MouseButton;
+use image::GenericImageView;
 use nalgebra::{Matrix4, Perspective3, Translation3, Vector3};
+
 use crate::cube::VERTICES;
-
 use crate::gl_handler::{check_errors, framebuffer_size_callback};
-// use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f};
-use crate::renderer::Renderer;
 
-mod renderer;
 mod gl_handler;
 mod camera;
 mod cube;
@@ -55,8 +50,6 @@ fn main() {
     glfw.set_swap_interval(glfw::SwapInterval::None);
 
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
-    // let opengl = unsafe { OpenGl::new_from_function(|s| window.get_proc_address(s) as *const _) }.unwrap();
-    // let renderer = &mut Renderer::create(opengl);
 
     let vertex_shader = compile_shader(VERTEX_SHADER_SOURCE, gl::VERTEX_SHADER);
     let fragment_shader = compile_shader(FRAGMENT_SHADER_SOURCE, gl::FRAGMENT_SHADER);
@@ -289,14 +282,6 @@ fn main() {
             }
         }
     }
-}
-
-fn draw(renderer: &mut Renderer, w: u32, h: u32) {
-    renderer.begin_frame(w, h);
-
-    renderer.rect(0.0, 0.0, 100.0, 100.0, Color::rgb(255, 0, 0));
-
-    renderer.end_frame();
 }
 
 fn compile_shader(src: &str, ty: GLenum) -> GLuint {
