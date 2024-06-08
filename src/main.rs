@@ -10,7 +10,6 @@ use std::ptr;
 use std::str;
 use std::time::Instant;
 
-use femtovg::Color;
 use gl::types::*;
 use glfw::{Action, Context, Key, WindowMode};
 use glfw::WindowEvent::MouseButton;
@@ -20,10 +19,9 @@ use nalgebra::{Matrix4, Perspective3, Translation3, Vector3};
 
 use crate::cube::VERTICES;
 use crate::gl_handler::{check_errors, framebuffer_size_callback};
-// use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f}; a
-use crate::renderer::Renderer;
 
-mod renderer;
+// use ogl33::{GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glClear, glVertex3f}; a
+
 mod gl_handler;
 mod camera;
 mod cube;
@@ -328,14 +326,6 @@ fn main() {
 
 
     }
-}
-
-fn draw(renderer: &mut Renderer, w: u32, h: u32) {
-    renderer.begin_frame(w, h);
-
-    renderer.rect(0.0, 0.0, 100.0, 100.0, Color::rgb(255, 0, 0));
-
-    renderer.end_frame();
 }
 
 fn compile_shader(src: &str, ty: GLenum) -> GLuint {
